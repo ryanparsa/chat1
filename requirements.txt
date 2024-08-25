@@ -1,0 +1,10 @@
+langchain
+langchain-community
+langchain-openai
+langchain-google-genai
+langchain-groq
+langchain-google-vertexai
+
+
+streamlit
+watchdog

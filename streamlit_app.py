@@ -16,14 +16,13 @@ def get_default_system_prompt(filename: str = default_system_prompt_filename) ->
     return open(filename, 'r').read()
 
 
-st.title('AI Confidence Coach')
-st.write('This is a web application that uses AI to help you build confidence.')
-
-
 def reset_history():
     messages_history.clear()
     messages_history.add_ai_message('How can I help you?')
 
+
+st.title('AI Confidence Coach')
+st.write('This is a web application that uses AI to help you build confidence.')
 
 with st.sidebar:
     llm = st.selectbox('Select a LLM', ['gpt-3.5-turbo', 'gpt-4o', 'gpt-4o-mini', 'groq', 'gemini'],
@@ -39,43 +38,45 @@ with st.sidebar:
 
 # If the user has filled in the required fields, we can proceed
 if llm_token and llm_prompt and llm:
+    try:
+        if llm in ['gpt-3.5-turbo', 'gpt-4o', 'gpt-4o-mini']:
+            llm_model = ChatOpenAI(model=llm, api_key=llm_token)
+        elif llm == 'groq':
+            llm_model = ChatGroq(model="llama3-8b-8192", api_key=llm_token)
+        elif llm == 'gemini':
+            llm_model = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=llm_token)
 
-    if llm in ['gpt-3.5-turbo', 'gpt-4o', 'gpt-4o-mini']:
-        llm_model = ChatOpenAI(model=llm, api_key=llm_token)
-    elif llm == 'groq':
-        llm_model = ChatGroq(model="llama3-8b-8192", api_key=llm_token)
-    elif llm == 'gemini':
-        llm_model = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=llm_token)
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ('system', llm_prompt),
+                MessagesPlaceholder(variable_name='history'),
+                ('human', '{question}'),
+            ]
+        )
 
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ('system', llm_prompt),
-            MessagesPlaceholder(variable_name='history'),
-            ('human', '{question}'),
-        ]
-    )
+        chain = prompt | llm_model
 
-    chain = prompt | llm_model
+        chain_with_history = RunnableWithMessageHistory(
+            chain,
+            lambda session_id: messages_history,
+            input_messages_key='question',
+            history_messages_key='history',
+        )
 
-    chain_with_history = RunnableWithMessageHistory(
-        chain,
-        lambda session_id: messages_history,
-        input_messages_key='question',
-        history_messages_key='history',
-    )
+        if len(messages_history.messages) == 0:
+            reset_history()
 
-    if len(messages_history.messages) == 0:
-        reset_history()
+        for msg in messages_history.messages:
+            st.chat_message(msg.type).write(msg.content)
 
-    for msg in messages_history.messages:
-        st.chat_message(msg.type).write(msg.content)
+        if prompt := st.chat_input():
+            st.chat_message('human').write(prompt)
 
-    if prompt := st.chat_input():
-        st.chat_message('human').write(prompt)
-
-        # As usual, new messages are added to StreamlitChatMessageHistory when the Chain is called.
-        config = {'configurable': {'session_id': 'any'}}
-        response = chain_with_history.invoke({'question': prompt}, config)
-        st.chat_message('ai').write(response.content)
+            # As usual, new messages are added to StreamlitChatMessageHistory when the Chain is called.
+            config = {'configurable': {'session_id': 'any'}}
+            response = chain_with_history.invoke({'question': prompt}, config)
+            st.chat_message('ai').write(response.content)
+    except Exception as e:
+        st.write(f'Error: {e}')
 else:
     st.write('Please fill in the required fields and click submit.')
